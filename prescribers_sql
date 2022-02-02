@@ -1,0 +1,30 @@
+/* 1. a. Which prescriber had the highest total number of claims (totaled over all drugs)? 
+		Report the npi and the total number of claims.
+		b. Repeat the above, but this time report the nppes_provider_first_name, 
+			nppes_provider_last_org_name,  specialty_description, and the total number of claims. */
+--A.
+SELECT PRESCRIBER.NPI,
+	SUBQUERY.TOTAL_CLAIMS
+FROM PRESCRIBER,(
+	SELECT NPI, SUM(TOTAL_CLAIM_COUNT) AS TOTAL_CLAIMS
+				 FROM PRESCRIPTION
+				 GROUP BY NPI) AS SUBQUERY
+WHERE PRESCRIBER.NPI = SUBQUERY.NPI
+ORDER BY TOTAL_CLAIMS DESC;
+--NPI 1881634483 had 99707 claims
+
+SELECT PRESCRIBER.NPI, nppes_provider_first_name, nppes_provider_last_org_name, specialty_description, 
+	SUBQUERY.TOTAL_CLAIMS
+FROM PRESCRIBER,(
+	SELECT NPI, SUM(TOTAL_CLAIM_COUNT) AS TOTAL_CLAIMS
+				 FROM PRESCRIPTION
+				 GROUP BY NPI) AS SUBQUERY
+WHERE PRESCRIBER.NPI = SUBQUERY.NPI
+ORDER BY TOTAL_CLAIMS DESC;
+
+
+
+
+
+
+
