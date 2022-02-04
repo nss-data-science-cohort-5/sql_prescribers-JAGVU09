@@ -13,18 +13,198 @@ WHERE PRESCRIBER.NPI = SUBQUERY.NPI
 ORDER BY TOTAL_CLAIMS DESC;
 --NPI 1881634483 had 99707 claims
 
-SELECT PRESCRIBER.NPI, nppes_provider_first_name, nppes_provider_last_org_name, specialty_description, 
-	SUBQUERY.TOTAL_CLAIMS
-FROM PRESCRIBER,(
-	SELECT NPI, SUM(TOTAL_CLAIM_COUNT) AS TOTAL_CLAIMS
-				 FROM PRESCRIPTION
-				 GROUP BY NPI) AS SUBQUERY
-WHERE PRESCRIBER.NPI = SUBQUERY.NPI
+--Try with a join instead of subquery. 
+SELECT PRESCRIBER.NPI,
+	SUM(PRESCRIPTION.TOTAL_CLAIM_COUNT) AS TOTAL_CLAIMS
+FROM PRESCRIBER
+RIGHT JOIN PRESCRIPTION ON PRESCRIPTION.NPI = PRESCRIBER.NPI
+GROUP BY PRESCRIBER.NPI
 ORDER BY TOTAL_CLAIMS DESC;
 
+--B.
+SELECT PRESCRIBER.NPI,
+	NPPES_PROVIDER_FIRST_NAME,
+	NPPES_PROVIDER_LAST_ORG_NAME,
+	SPECIALTY_DESCRIPTION,
+	SUBQUERY.TOTAL_CLAIMS
+FROM PRESCRIBER,
+	(SELECT NPI,
+			SUM(TOTAL_CLAIM_COUNT) AS TOTAL_CLAIMS
+		FROM PRESCRIPTION
+		GROUP BY NPI) AS SUBQUERY
+WHERE PRESCRIBER.NPI = SUBQUERY.NPI
+ORDER BY TOTAL_CLAIMS DESC; 
+
+--Try with a join instead of subquery. 
+SELECT PRESCRIBER.NPI,
+	PRESCRIBER.NPPES_PROVIDER_FIRST_NAME || ' ' ||
+	PRESCRIBER.NPPES_PROVIDER_LAST_ORG_NAME AS provider,
+	PRESCRIBER.SPECIALTY_DESCRIPTION,
+	SUM(PRESCRIPTION.TOTAL_CLAIM_COUNT) AS TOTAL_CLAIMS
+FROM PRESCRIBER
+RIGHT JOIN PRESCRIPTION ON PRESCRIPTION.NPI = PRESCRIBER.NPI
+GROUP BY PRESCRIBER.NPI,
+	PRESCRIBER.NPPES_PROVIDER_FIRST_NAME,
+	PRESCRIBER.NPPES_PROVIDER_LAST_ORG_NAME,
+	PRESCRIBER.SPECIALTY_DESCRIPTION
+ORDER BY TOTAL_CLAIMS DESC;
+
+/*2. a. Which specialty had the most total number of claims (totaled over all drugs)?
+
+    b. Which specialty had the most total number of claims for opioids?
+
+    c. **Challenge Question:** Are there any specialties that appear in the prescriber 
+	table that have no associated prescriptions in the prescription table?
+
+    d. **Difficult Bonus:** *Do not attempt until you have solved all other problems!* 
+	For each specialty, report the percentage of total claims by that specialty which are for 
+	opioids. Which specialties have a high percentage of opioids?
+*/
+
+--A. Family Practice had the highest total number of claims.
+SELECT PRESCRIBER.SPECIALTY_DESCRIPTION,
+	SUM(PRESCRIPTION.TOTAL_CLAIM_COUNT) AS TOTAL_CLAIMS
+FROM PRESCRIBER
+RIGHT JOIN PRESCRIPTION ON PRESCRIPTION.NPI = PRESCRIBER.NPI
+GROUP BY PRESCRIBER.SPECIALTY_DESCRIPTION
+ORDER BY TOTAL_CLAIMS DESC;
+
+--B. Nurse Practitioners slinging pills! 
+SELECT PRESCRIBER.SPECIALTY_DESCRIPTION, drug.opioid_drug_flag,
+	SUM(PRESCRIPTION.TOTAL_CLAIM_COUNT) AS TOTAL_CLAIMS
+FROM PRESCRIBER
+JOIN PRESCRIPTION ON PRESCRIPTION.NPI = PRESCRIBER.NPI
+JOIN drug ON drug.drug_name = prescription.drug_name
+WHERE drug.opioid_drug_flag = 'Y'
+GROUP BY PRESCRIBER.SPECIALTY_DESCRIPTION, drug.opioid_drug_flag
+ORDER BY TOTAL_CLAIMS DESC;
+
+--C.
+SELECT DISTINCT specialty_description, SUM(total_claim_count) AS total_claims
+FROM prescriber
+FULL JOIN prescription
+ON prescriber.npi = prescription.npi
+GROUP BY specialty_description
+HAVING (SUM(total_claim_count) IS NULL)
+ORDER BY total_claims;
+
+/*3. a. Which drug (generic_name) had the highest total drug cost?
+
+    b. Which drug (generic_name) has the hightest total cost per day?
+	**Bonus: Round your cost per day column to 2 decimal places. Google ROUND to see how this works.
+*/
+
+--A Insulin is expensive. 
+SELECT SUM(total_drug_cost) AS total_cost, generic_name
+FROM prescription
+JOIN drug
+ON prescription.drug_name = drug.drug_name
+GROUP BY generic_name
+ORDER BY total_cost DESC;
+
+--B C1 ESTERASE INHIBITOR 3495.22
+SELECT ROUND(SUM(total_drug_cost)/SUM(total_day_supply), 2) AS cost_per_day, generic_name 
+FROM prescription
+JOIN drug
+ON prescription.drug_name = drug.drug_name
+GROUP BY generic_name
+ORDER BY cost_per_day DESC;
+
+/* 4. a. For each drug in the drug table, return the drug name and then a column named 'drug_type'
+which says 'opioid' for drugs which have opioid_drug_flag = 'Y', says 'antibiotic' for those drugs
+which have antibiotic_drug_flag = 'Y', and says 'neither' for all other drugs.
+
+    b. Building off of the query you wrote for part a, 
+	determine whether more was spent (total_drug_cost) on opioids or on antibiotics. 
+	Hint: Format the total costs as MONEY for easier comparision.
+*/
+
+--A.
+SELECT DRUG_NAME,
+	CASE
+					WHEN OPIOID_DRUG_FLAG = 'Y' THEN 'opioid'
+					WHEN ANTIBIOTIC_DRUG_FLAG = 'Y' THEN 'antibiotic'
+					ELSE 'neither'
+	END AS DRUG_TYPE
+FROM DRUG;
+
+--B.
+SELECT SUM(TOTAL_DRUG_COST),
+	CASE
+					WHEN OPIOID_DRUG_FLAG = 'Y' THEN 'opioid'
+					WHEN ANTIBIOTIC_DRUG_FLAG = 'Y' THEN 'antibiotic'
+	END AS DRUG_TYPE
+FROM DRUG
+JOIN PRESCRIPTION ON PRESCRIPTION.DRUG_NAME = DRUG.DRUG_NAME
+GROUP BY DRUG_TYPE;
+
+/* 
+5. a. How many CBSAs are in Tennessee? **Warning:** The cbsa table
+contains information for all states, not just Tennessee.
+
+    b. Which cbsa has the largest combined population? Which has the
+	smallest? Report the CBSA name and total population.
+
+    c. What is the largest (in terms of population) county which is 
+	not included in a CBSA? Report the county name and population.
+*/
+
+--A. 42
+SELECT COUNT(DISTINCT CBSA),
+	STATE
+FROM CBSA
+JOIN FIPS_COUNTY ON CBSA.FIPSCOUNTY = FIPS_COUNTY.FIPSCOUNTY
+WHERE STATE = 'TN'
+GROUP BY STATE;
+
+--B.
+SELECT CBSA,
+	CBSANAME,
+	SUM(POPULATION) AS POP_SUM
+FROM CBSA
+JOIN POPULATION ON CBSA.FIPSCOUNTY = POPULATION.FIPSCOUNTY
+GROUP BY CBSA,
+	CBSANAME
+ORDER BY POP_SUM DESC;
+
+--C. Sevier county
+
+SELECT population, county
+FROM fips_county 
+INNER JOIN population 
+ON fips_county.fipscounty = population.fipscounty
+FULL JOIN cbsa 
+ON FIPS_COUNTY.fipscounty = CBSA.fipscounty
+WHERE cbsa IS NULL
+ORDER BY population DESC
+;
+
+/*
+6. 
+    a. Find all rows in the prescription table where total_claims is at least 3000.
+	Report the drug_name and the total_claim_count.
+
+    b. For each instance that you found in part a, add a column that indicates whether
+	the drug is an opioid.
+
+    c. Add another column to you answer from the previous part which gives the prescriber
+	first and last name associated with each row.
+*/
+
+--A.
+
+SELECT drug_name, SUM(total_claim_count) AS total_claim
+FROM prescription
+WHERE total_claim_count >= 3000
+GROUP BY drug_name;
 
 
 
+SELECT drug.drug_name, SUM(total_claim_count) AS total_claim, drug.opioid_drug_flag AS Is_opioid
+FROM prescription
+JOIN drug ON drug.drug_name = prescription.drug_name
+WHERE total_claim_count >= 3000 
+GROUP BY drug.drug_name, Is_opioid;
 
 
 
