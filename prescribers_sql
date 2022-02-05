@@ -65,7 +65,8 @@ ORDER BY TOTAL_CLAIMS DESC;
 SELECT PRESCRIBER.SPECIALTY_DESCRIPTION,
 	SUM(PRESCRIPTION.TOTAL_CLAIM_COUNT) AS TOTAL_CLAIMS
 FROM PRESCRIBER
-RIGHT JOIN PRESCRIPTION ON PRESCRIPTION.NPI = PRESCRIBER.NPI
+RIGHT JOIN PRESCRIPTION
+ON PRESCRIPTION.NPI = PRESCRIBER.NPI
 GROUP BY PRESCRIBER.SPECIALTY_DESCRIPTION
 ORDER BY TOTAL_CLAIMS DESC;
 
@@ -95,7 +96,7 @@ ORDER BY total_claims;
 */
 
 --A Insulin is expensive. 
-SELECT SUM(total_drug_cost) AS total_cost, generic_name
+SELECT SUM(total_drug_cost)::MONEY AS total_cost, generic_name
 FROM prescription
 JOIN drug
 ON prescription.drug_name = drug.drug_name
@@ -103,7 +104,7 @@ GROUP BY generic_name
 ORDER BY total_cost DESC;
 
 --B C1 ESTERASE INHIBITOR 3495.22
-SELECT ROUND(SUM(total_drug_cost)/SUM(total_day_supply), 2) AS cost_per_day, generic_name 
+SELECT ROUND(SUM(total_drug_cost)/SUM(total_day_supply), 2)::MONEY AS cost_per_day, generic_name 
 FROM prescription
 JOIN drug
 ON prescription.drug_name = drug.drug_name
@@ -129,7 +130,7 @@ SELECT DRUG_NAME,
 FROM DRUG;
 
 --B.
-SELECT SUM(TOTAL_DRUG_COST),
+SELECT SUM(TOTAL_DRUG_COST)::MONEY,
 	CASE
 					WHEN OPIOID_DRUG_FLAG = 'Y' THEN 'opioid'
 					WHEN ANTIBIOTIC_DRUG_FLAG = 'Y' THEN 'antibiotic'
@@ -149,7 +150,7 @@ contains information for all states, not just Tennessee.
 	not included in a CBSA? Report the county name and population.
 */
 
---A. 42
+--A. 10
 SELECT COUNT(DISTINCT CBSA),
 	STATE
 FROM CBSA
@@ -157,8 +158,8 @@ JOIN FIPS_COUNTY ON CBSA.FIPSCOUNTY = FIPS_COUNTY.FIPSCOUNTY
 WHERE STATE = 'TN'
 GROUP BY STATE;
 
---B.
-SELECT CBSA,
+--B. Nashville-Davidson-Murfreesboro-Franklin is the largest. Morristown is the smallest. 
+SELECT 
 	CBSANAME,
 	SUM(POPULATION) AS POP_SUM
 FROM CBSA
@@ -169,14 +170,13 @@ ORDER BY POP_SUM DESC;
 
 --C. Sevier county
 
-SELECT population, county
-FROM fips_county 
-INNER JOIN population 
-ON fips_county.fipscounty = population.fipscounty
-FULL JOIN cbsa 
-ON FIPS_COUNTY.fipscounty = CBSA.fipscounty
-WHERE cbsa IS NULL
-ORDER BY population DESC
+SELECT COUNTY,
+	POPULATION
+FROM FIPS_COUNTY
+INNER JOIN POPULATION ON FIPS_COUNTY.FIPSCOUNTY = POPULATION.FIPSCOUNTY
+FULL JOIN CBSA ON FIPS_COUNTY.FIPSCOUNTY = CBSA.FIPSCOUNTY
+WHERE CBSA IS NULL
+ORDER BY POPULATION DESC
 ;
 
 /*
@@ -198,13 +198,140 @@ FROM prescription
 WHERE total_claim_count >= 3000
 GROUP BY drug_name;
 
-
-
+--B.
 SELECT drug.drug_name, SUM(total_claim_count) AS total_claim, drug.opioid_drug_flag AS Is_opioid
 FROM prescription
 JOIN drug ON drug.drug_name = prescription.drug_name
 WHERE total_claim_count >= 3000 
 GROUP BY drug.drug_name, Is_opioid;
 
+--C. I'm not sure this is correct. I think I don't understand the question
+SELECT drug.drug_name, SUM(total_claim_count) AS total_claim, drug.opioid_drug_flag AS Is_opioid,
+	PRESCRIBER.NPPES_PROVIDER_FIRST_NAME || ' ' ||
+	PRESCRIBER.NPPES_PROVIDER_LAST_ORG_NAME AS provider
+FROM prescription
+JOIN drug ON drug.drug_name = prescription.drug_name
+JOIN prescriber ON PRESCRIBER.NPI = PRESCRIBER.NPI
+WHERE total_claim_count >= 3000 
+GROUP BY drug.drug_name, Is_opioid, PROVIDER;
+
+/*
+7. The goal of this exercise is to generate a full list of all pain management specialists in
+Nashville and the number of claims they had for each opioid.
+    a. First, create a list of all npi/drug_name combinations for pain management 
+	specialists (specialty_description = 'Pain Managment') in the city of Nashville
+	(nppes_provider_city = 'NASHVILLE'), where the drug is an opioid (opiod_drug_flag = 'Y').
+	
+	**Warning:** Double-check your query before running it. 
+	You will likely only need to use the prescriber and drug tables.
+
+    b. Next, report the number of claims per drug per prescriber. Be sure to include all
+	combinations, whether or not the prescriber had any claims. You should report the npi,
+	the drug name, and the number of claims (total_claim_count).
+    
+    c. Finally, if you have not done so already, fill in any missing values for total_claim_count
+	with 0. Hint - Google the COALESCE function.
+
+*/
+
+--A.
+SELECT COUNT(DISTINCT drug_name)
+FROM drug
+WHERE opioid_drug_flag = 'Y';
+--91
+SELECT COUNT(distinct npi)
+FROM prescriber
+WHERE specialty_description = 'Pain Management' 
+AND nppes_provider_city = 'NASHVILLE'
+--7
+
+SELECT prescriber.npi, drug.drug_name
+FROM prescriber
+CROSS JOIN drug
+WHERE specialty_description = 'Pain Management' 
+AND nppes_provider_city = 'NASHVILLE'
+AND drug.opioid_drug_flag = 'Y'
+--637
+
+--B.
+/*Next, report the number of claims per drug per prescriber. Be sure to include all
+	combinations, whether or not the prescriber had any claims. You should report the npi,
+	the drug name, and the number of claims (total_claim_count).*/
+SELECT
+	DISTINCT p.npi,
+	d.drug_name,
+	COALESCE(SUM(p1.total_claim_count), 0) AS total_claims
+FROM prescriber p
+CROSS JOIN drug d
+FULL JOIN prescription p1 ON d.drug_name = p1.drug_name AND p.npi = p1.npi
+WHERE d.opioid_drug_flag = 'Y'
+AND p.specialty_description = 'Pain Management'
+AND p.nppes_provider_city = 'NASHVILLE'
+GROUP BY p.npi, d.drug_name
+;
+
+	SELECT 
+	total_claim_count AS total_claims
+	FROM prescription
+
+WITH d_opioid AS (
+	SELECT drug_name
+	FROM drug
+	WHERE opioid_drug_flag = 'Y'
+)
+SELECT scribe.npi, d_opioid.drug_name
+FROM prescriber as scribe
+	CROSS JOIN d_opioid
+WHERE scribe.specialty_description = 'Pain Management'
+AND scribe.nppes_provider_city = 'NASHVILLE'
+
+SELECT
+	DISTINCT p.npi,
+	d.drug_name,
+	COALESCE(p1.total_claim_count, 0) AS total_claims
+FROM prescriber p
+CROSS JOIN drug d
+LEFT JOIN prescription p1 ON d.drug_name = p1.drug_name
+WHERE d.opioid_drug_flag = 'Y'
+AND p.specialty_description = 'Pain Management'
+AND p.nppes_provider_city = 'NASHVILLE'
+ORDER BY 1
+;
+
+SELECT
+	p1.npi,
+	p1.drug_name,
+	COALESCE(sum(p1.total_claim_count), 0) AS total_claims
+FROM prescriber p
+CROSS JOIN drug d
+LEFT JOIN prescription p1 ON d.drug_name = p1.drug_name
+WHERE d.opioid_drug_flag = 'Y'
+AND p.specialty_description = 'Pain Management'
+AND p.nppes_provider_city = 'NASHVILLE'
+group by p1.drug_name, p1.npi
+ORDER BY p1.drug_name
+
+SELECT
+	DISTINCT p.npi,
+	d.drug_name,
+	COALESCE(SUM(p1.total_claim_count), 0) AS total_claims
+FROM prescriber p
+CROSS JOIN drug d
+LEFT JOIN prescription p1 ON d.drug_name = p1.drug_name AND p.npi = p1.npi
+WHERE d.opioid_drug_flag = 'Y'
+AND p.specialty_description = 'Pain Management'
+AND p.nppes_provider_city = 'NASHVILLE'
+GROUP BY 1,2
+ORDER BY 3 DESC
+;
+
+SELECT prescriber.npi, drug.drug_name, COALESCE(SUM(total_claim_count), 0) AS total_claims
+FROM prescriber
+WHERE specialty_description = 'Pain Management' 
+AND nppes_provider_city = 'NASHVILLE'
+CROSS JOIN drug
+WHERE drug.opioid_drug_flag = 'Y'
+FROM prescription p1
+LEFT JOIN on prescriber.npi = prescription.npi ;
 
 
