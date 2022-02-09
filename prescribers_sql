@@ -198,22 +198,49 @@ FROM prescription
 WHERE total_claim_count >= 3000
 GROUP BY drug_name;
 
+--This code is correct even though levothyroxine shows up three times.
+SELECT drug_name, total_claim_count
+FROM prescription
+WHERE total_claim_count >=3000;
+
 --B.
-SELECT drug.drug_name, SUM(total_claim_count) AS total_claim, drug.opioid_drug_flag AS Is_opioid
+SELECT drug.drug_name, total_claim_count , drug.opioid_drug_flag AS Is_opioid
 FROM prescription
 JOIN drug ON drug.drug_name = prescription.drug_name
-WHERE total_claim_count >= 3000 
-GROUP BY drug.drug_name, Is_opioid;
+WHERE total_claim_count >= 3000;
 
---C. I'm not sure this is correct. I think I don't understand the question
-SELECT drug.drug_name, SUM(total_claim_count) AS total_claim, drug.opioid_drug_flag AS Is_opioid,
+SELECT DRUG_NAME,
+	SUM(TOTAL_CLAIM_COUNT) AS S,
+	OPIOID_DRUG_FLAG
+FROM PRESCRIPTION
+LEFT JOIN DRUG USING (DRUG_NAME)
+WHERE TOTAL_CLAIM_COUNT >= 3000
+GROUP BY DRUG_NAME,
+	OPIOID_DRUG_FLAG
+ORDER BY S DESC;
+
+--C. I'm not sure this is correct.
+SELECT drug.drug_name, total_claim_count, drug.opioid_drug_flag AS Is_opioid,
 	PRESCRIBER.NPPES_PROVIDER_FIRST_NAME || ' ' ||
 	PRESCRIBER.NPPES_PROVIDER_LAST_ORG_NAME AS provider
 FROM prescription
 JOIN drug ON drug.drug_name = prescription.drug_name
 JOIN prescriber ON PRESCRIBER.NPI = PRESCRIBER.NPI
-WHERE total_claim_count >= 3000 
-GROUP BY drug.drug_name, Is_opioid, PROVIDER;
+WHERE total_claim_count >= 3000;
+
+SELECT DRUG_NAME,
+	TOTAL_CLAIM_COUNT,
+	NPPES_PROVIDER_FIRST_NAME,
+	NPPES_PROVIDER_LAST_ORG_NAME,
+	CASE
+					WHEN OPIOID_DRUG_FLAG = 'Y' THEN 'opioid'
+					ELSE 'neither'
+	END AS DRUG_TYPE
+FROM DRUG
+FULL JOIN PRESCRIPTION USING (DRUG_NAME)
+FULL JOIN PRESCRIBER USING (NPI)
+WHERE TOTAL_CLAIM_COUNT > 3000
+ORDER BY DRUG_TYPE DESC
 
 /*
 7. The goal of this exercise is to generate a full list of all pain management specialists in
@@ -245,12 +272,13 @@ WHERE specialty_description = 'Pain Management'
 AND nppes_provider_city = 'NASHVILLE'
 --7
 
-SELECT prescriber.npi, drug.drug_name
-FROM prescriber
-CROSS JOIN drug
-WHERE specialty_description = 'Pain Management' 
-AND nppes_provider_city = 'NASHVILLE'
-AND drug.opioid_drug_flag = 'Y'
+SELECT PRESCRIBER.NPI,
+	DRUG.DRUG_NAME
+FROM PRESCRIBER
+CROSS JOIN DRUG
+WHERE SPECIALTY_DESCRIPTION = 'Pain Management'
+	AND NPPES_PROVIDER_CITY = 'NASHVILLE'
+	AND DRUG.OPIOID_DRUG_FLAG = 'Y'
 --637
 
 --B.
@@ -322,7 +350,7 @@ WHERE d.opioid_drug_flag = 'Y'
 AND p.specialty_description = 'Pain Management'
 AND p.nppes_provider_city = 'NASHVILLE'
 GROUP BY 1,2
-ORDER BY 3 DESC
+ORDER BY 1,2 
 ;
 
 SELECT prescriber.npi, drug.drug_name, COALESCE(SUM(total_claim_count), 0) AS total_claims
@@ -332,6 +360,15 @@ AND nppes_provider_city = 'NASHVILLE'
 CROSS JOIN drug
 WHERE drug.opioid_drug_flag = 'Y'
 FROM prescription p1
-LEFT JOIN on prescriber.npi = prescription.npi ;
+LEFT JOIN on prescriber.npi = prescription.npi;
 
-
+SELECT npi, drug_name, COALESCE(total_claim_count, 0)
+FROM(SELECT npi, drug_name
+	FROM prescriber
+	CROSS JOIN drug
+	WHERE nppes_provider_city = 'NASHVILLE'
+	AND specialty_description = 'Pain Management'
+	AND opioid_drug_flag = 'Y') AS a
+LEFT JOIN prescription
+USING(npi, drug_name)
+ORDER BY npi;

@@ -16,4 +16,221 @@ WHERE prescription.npi IS NULL;
     c. Which drugs appear in the top five prescribed for both Family Practice
 	prescribers and Cardiologists? Combine what you did for parts a and b into
 	a single query to answer this question.
+	
+	Make A and B into CTEs and then do an INTERSECT.
+	Michael suggested trying to do a window function so do it.
 */
+--A
+SELECT GENERIC_NAME,
+	SUM(TOTAL_CLAIM_COUNT)
+FROM PRESCRIPTION
+LEFT JOIN PRESCRIBER USING (NPI)
+LEFT JOIN DRUG USING(DRUG_NAME)
+WHERE SPECIALTY_DESCRIPTION = 'Family Practice'
+GROUP BY GENERIC_NAME
+ORDER BY 2 DESC
+LIMIT 5;
+
+--B
+SELECT GENERIC_NAME,
+	SUM(TOTAL_CLAIM_COUNT)
+FROM PRESCRIPTION
+LEFT JOIN PRESCRIBER USING (NPI)
+LEFT JOIN DRUG USING(DRUG_NAME)
+WHERE SPECIALTY_DESCRIPTION = 'Cardiology'
+GROUP BY GENERIC_NAME
+ORDER BY 2 DESC
+LIMIT 5;
+
+--C
+WITH FAMILY_DRUGS AS
+	(SELECT D.GENERIC_NAME,
+			SUM(P2.TOTAL_CLAIM_COUNT) AS TOTAL_PERSCRIBED
+		FROM PRESCRIBER AS P1
+		INNER JOIN PRESCRIPTION AS P2 USING (NPI)
+		INNER JOIN DRUG AS D USING (DRUG_NAME)
+		WHERE SPECIALTY_DESCRIPTION = 'Family Practice'
+		GROUP BY D.GENERIC_NAME
+		ORDER BY 2 DESC
+		LIMIT 5),
+	CARDIOLOGY_DRUGS AS
+	(SELECT D.GENERIC_NAME,
+			SUM(P2.TOTAL_CLAIM_COUNT) AS TOTAL_PERSCRIBED
+		FROM PRESCRIBER AS P1
+		INNER JOIN PRESCRIPTION AS P2 USING (NPI)
+		INNER JOIN DRUG AS D USING (DRUG_NAME)
+		WHERE SPECIALTY_DESCRIPTION = 'Cardiology'
+		GROUP BY D.GENERIC_NAME
+		ORDER BY 2 DESC
+		LIMIT 5)
+SELECT GENERIC_NAME
+FROM FAMILY_DRUGS INTERSECT
+SELECT GENERIC_NAME
+FROM CARDIOLOGY_DRUGS;
+
+/*
+3. Your goal in this question is to generate a list of the top prescribers in each of the major metropolitan areas of Tennessee.
+    a. First, write a query that finds the top 5 prescribers in Nashville in terms of the total number of claims (total_claim_count) across all drugs.
+	Report the npi, the total number of claims, and include a column showing the city.
+    b. Now, report the same for Memphis.
+    c. Combine your results from a and b, along with the results for Knoxville and Chattanooga.
+*/
+--A
+SELECT NPI,
+	SUM(TOTAL_CLAIM_COUNT) AS TOTAL_CLAIM_COUNT,
+	NPPES_PROVIDER_CITY
+FROM PRESCRIBER
+INNER JOIN PRESCRIPTION USING(NPI)
+WHERE NPPES_PROVIDER_CITY = 'NASHVILLE'
+GROUP BY NPI,
+	NPPES_PROVIDER_CITY
+ORDER BY TOTAL_CLAIM_COUNT DESC
+LIMIT 5;
+
+--B
+SELECT NPI,
+	SUM(TOTAL_CLAIM_COUNT) AS TOTAL_CLAIM_COUNT,
+	NPPES_PROVIDER_CITY
+FROM PRESCRIBER
+INNER JOIN PRESCRIPTION USING(NPI)
+WHERE NPPES_PROVIDER_CITY = 'MEMPHIS'
+GROUP BY NPI,
+	NPPES_PROVIDER_CITY
+ORDER BY TOTAL_CLAIM_COUNT DESC
+LIMIT 5;
+
+
+--C
+WITH NASHVILLE AS(
+	SELECT NPI,
+	SUM(TOTAL_CLAIM_COUNT) AS TOTAL_CLAIM_COUNT,
+	NPPES_PROVIDER_CITY
+FROM PRESCRIBER
+INNER JOIN PRESCRIPTION USING(NPI)
+WHERE NPPES_PROVIDER_CITY = 'NASHVILLE'
+GROUP BY NPI,
+	NPPES_PROVIDER_CITY
+ORDER BY TOTAL_CLAIM_COUNT DESC
+LIMIT 5;
+),
+MEMPHIS AS (
+	SELECT NPI,
+	SUM(TOTAL_CLAIM_COUNT) AS TOTAL_CLAIM_COUNT,
+	NPPES_PROVIDER_CITY
+FROM PRESCRIBER
+INNER JOIN PRESCRIPTION USING(NPI)
+WHERE NPPES_PROVIDER_CITY = 'NASHVILLE'
+GROUP BY NPI,
+	NPPES_PROVIDER_CITY
+ORDER BY TOTAL_CLAIM_COUNT DESC
+LIMIT 5;
+),
+KNOXVILLE AS (SELECT NPI,
+	SUM(TOTAL_CLAIM_COUNT) AS TOTAL_CLAIM_COUNT,
+	NPPES_PROVIDER_CITY
+FROM PRESCRIBER
+INNER JOIN PRESCRIPTION USING(NPI)
+WHERE NPPES_PROVIDER_CITY = 'KNOXVILLE'
+GROUP BY NPI,
+	NPPES_PROVIDER_CITY
+ORDER BY TOTAL_CLAIM_COUNT DESC
+LIMIT 5;
+), 
+CHATTANOOGA AS (SELECT NPI,
+	SUM(TOTAL_CLAIM_COUNT) AS TOTAL_CLAIM_COUNT,
+	NPPES_PROVIDER_CITY
+FROM PRESCRIBER
+INNER JOIN PRESCRIPTION USING(NPI)
+WHERE NPPES_PROVIDER_CITY = 'CHATTANOOGA'
+GROUP BY NPI,
+	NPPES_PROVIDER_CITY
+ORDER BY TOTAL_CLAIM_COUNT DESC
+LIMIT 5;
+)
+
+--FROM JOSH
+(SELECT 
+	npi,
+	nppes_provider_city,
+	SUM(total_claim_count) AS total_claims
+FROM prescriber
+INNER JOIN prescription
+USING (npi)
+WHERE nppes_provider_city = 'NASHVILLE'
+GROUP BY npi, nppes_provider_city
+ORDER BY total_claims DESC
+LIMIT 5)
+UNION
+(SELECT 
+	npi,
+	nppes_provider_city,
+	SUM(total_claim_count) AS total_claims
+FROM prescriber
+INNER JOIN prescription
+USING (npi)
+WHERE nppes_provider_city = 'MEMPHIS'
+GROUP BY npi, nppes_provider_city
+ORDER BY total_claims DESC
+LIMIT 5)
+UNION
+(SELECT 
+	npi,
+	nppes_provider_city,
+	SUM(total_claim_count) AS total_claims
+FROM prescriber
+INNER JOIN prescription
+USING (npi)
+WHERE nppes_provider_city = 'KNOXVILLE'
+GROUP BY npi, nppes_provider_city
+ORDER BY total_claims DESC
+LIMIT 5)
+UNION
+(SELECT 
+	npi,
+	nppes_provider_city,
+	SUM(total_claim_count) AS total_claims
+FROM prescriber
+INNER JOIN prescription
+USING (npi)
+WHERE nppes_provider_city = 'CHATTANOOGA'
+GROUP BY npi, nppes_provider_city
+ORDER BY total_claims DESC
+LIMIT 5)
+ORDER BY nppes_provider_city, total_claims DESC;
+
+/*
+4. Find all counties which had an above-average (for the state) number of overdose deaths in 2017. 
+Report the county name and number of overdose deaths.
+*/
+SELECT COUNTY,
+	OVERDOSE_DEATHS
+FROM FIPS_COUNTY
+INNER JOIN OVERDOSE_DEATHS USING (FIPSCOUNTY)
+WHERE YEAR = 2017
+	AND OVERDOSE_DEATHS >
+		(SELECT AVG(OVERDOSE_DEATHS)
+			FROM OVERDOSE_DEATHS
+			WHERE YEAR = 2017)
+ORDER BY OVERDOSE_DEATHS DESC;
+/*
+5.
+    a. Write a query that finds the total population of Tennessee.
+    b. Build off of the query that you wrote in part a to write a 
+	query that returns for each county that county's name, its population,
+	and the percentage of the total population of Tennessee that is contained in that county.
+*/
+
+SELECT *
+FROM fips_county;
+
+SELECT sum(population)
+from population
+;
+
+SELECT COUNTY,
+	STATE,
+	population.POPULATION,
+	ROUND(100.0* population.POPULATION/SUM(population.POPULATION) OVER(), 2) AS PERC_OF_TOT
+FROM FIPS_COUNTY
+INNER JOIN POPULATION ON FIPS_COUNTY.FIPSCOUNTY = POPULATION.FIPSCOUNTY;
+
